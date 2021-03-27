@@ -1,0 +1,522 @@
+Events has 443 records. FK fields:
+{
+  type: 'multipleRecordLinks',
+  id: 'flddxxz2SFfFjyCHk',
+  name: 'Planner',
+  _relation: { table: 'Planners', cardinality: 'one' }
+}
+{
+  type: 'multipleRecordLinks',
+  id: 'fldsISlah1sY8uk8P',
+  name: 'Contact',
+  _relation: { table: 'Contacts', cardinality: 'one' }
+}
+{
+  type: 'multipleRecordLinks',
+  id: 'fldsTi7vC78cYCf6u',
+  name: 'Destination',
+  _relation: { table: 'Destinations', cardinality: 'one' }
+}
+{
+  type: 'multipleRecordLinks',
+  id: 'fld5SowCzgHUmMxKj',
+  name: 'Venues',
+  _relation: { table: 'Venues', cardinality: 'many' }
+}
+{
+  type: 'multipleRecordLinks',
+  id: 'fldFZX2loMv1KrlFD',
+  name: 'EventDetails',
+  _relation: { table: 'EventDetails', cardinality: 'many' }
+}
+EventDetails has 3853 records. FK fields:
+{
+  type: 'multipleRecordLinks',
+  id: 'fldTrZqz2mIeiLDwl',
+  name: 'Service',
+  _relation: { table: 'Services', cardinality: 'one' }
+}
+{
+  type: 'multipleRecordLinks',
+  id: 'fld6URRLmegrLU0r9',
+  name: 'Supplier',
+  _relation: { table: 'Suppliers', cardinality: 'one' }
+}
+{
+  type: 'multipleRecordLinks',
+  id: 'fldLi4wz6ww85hjjF',
+  name: 'Currency',
+  _relation: { table: 'Currency', cardinality: 'one' }
+}
+{
+  type: 'multipleRecordLinks',
+  id: 'fldKbf2yFRIQk8LJO',
+  name: 'InvoiceDetails',
+  _relation: { table: 'InvoiceDetails', cardinality: 'many' }
+}
+{
+  type: 'multipleRecordLinks',
+  id: 'fldsAXlEC46miCZKQ',
+  name: 'Event',
+  _relation: { table: 'Events', cardinality: 'one' }
+}
+Suppliers has 2454 records. FK fields:
+{
+  type: 'multipleRecordLinks',
+  id: 'fldyh6BwNMewLjqph',
+  name: 'Contact',
+  _relation: { table: 'Contacts', cardinality: 'one' }
+}
+{
+  type: 'multipleRecordLinks',
+  id: 'fld32R5L9CjFyPxWD',
+  name: 'Covers',
+  _relation: { table: 'Places', cardinality: 'many' }
+}
+{
+  type: 'multipleRecordLinks',
+  id: 'fldmsSJDyBmlbW4wS',
+  name: 'Categories',
+  _relation: { table: 'Categories', cardinality: 'many' }
+}
+{
+  type: 'multipleRecordLinks',
+  id: 'fldRsnV9EBWJ9zdGm',
+  name: 'EventDetails',
+  _relation: { table: 'EventDetails', cardinality: 'many' }
+}
+{
+  type: 'multipleRecordLinks',
+  id: 'fldr2ezpCLil7aQim',
+  name: 'OLD_Clients',
+  _relation: { table: 'Contacts', cardinality: 'many' }
+}
+{
+  type: 'multipleRecordLinks',
+  id: 'fldBcXv8TNKMYEqFP',
+  name: 'Currency',
+  _relation: { table: 'Currency', cardinality: 'one' }
+}
+{
+  type: 'multipleRecordLinks',
+  id: 'fldbz248XUNKZC3Se',
+  name: 'Venue',
+  _relation: { table: 'Venues', cardinality: 'one' }
+}
+{
+  type: 'multipleRecordLinks',
+  id: 'fldMIRf7KlFr10vhu',
+  name: 'Planner',
+  _relation: { table: 'Planners', cardinality: 'one' }
+}
+Venues has 1349 records. FK fields:
+{
+  type: 'multipleRecordLinks',
+  id: 'fld683z38qtFkN13W',
+  name: 'VenueTypes',
+  _relation: { table: 'VenueTypes', cardinality: 'many' }
+}
+{
+  type: 'multipleRecordLinks',
+  id: 'fld6TswAzY7ovrCBa',
+  name: 'VenueFeatures',
+  _relation: { table: 'VenueFeatures', cardinality: 'many' }
+}
+{
+  type: 'multipleRecordLinks',
+  id: 'fld3nYjoGSOxsdbd6',
+  name: 'Events',
+  _relation: { table: 'Events', cardinality: 'many' }
+}
+{
+  type: 'multipleRecordLinks',
+  id: 'fld8ThPZYf9AbfhYa',
+  name: 'Supplier',
+  _relation: { table: 'Suppliers', cardinality: 'one' }
+}
+{
+  type: 'multipleRecordLinks',
+  id: 'fld8b6b5lh40Ybn9Z',
+  name: 'Enquiries',
+  _relation: { table: 'Enquiries', cardinality: 'many' }
+}
+Prices has 373 records. FK fields:
+{
+  type: 'multipleRecordLinks',
+  id: 'fldonMMbIAVZ6IWMj',
+  name: 'Destination',
+  _relation: { table: 'Destinations', cardinality: 'one' }
+}
+{
+  type: 'multipleRecordLinks',
+  id: 'fld9txTO7BAfU76XQ',
+  name: 'Service',
+  _relation: { table: 'Services', cardinality: 'one' }
+}
+{
+  type: 'multipleRecordLinks',
+  id: 'fldj2qGjwpw1LhtaC',
+  name: 'Packages',
+  _relation: { table: 'Packages', cardinality: 'many' }
+}
+Contacts has 2904 records. FK fields:
+{
+  type: 'multipleRecordLinks',
+  id: 'fldsV9WFxV2DgSOvC',
+  name: 'Country',
+  _relation: { table: 'Places', cardinality: 'one' }
+}
+{
+  type: 'multipleRecordLinks',
+  id: 'fldqR0P4cSuWSjTTz',
+  name: 'Events',
+  _relation: { table: 'Events', cardinality: 'one' }
+}
+{
+  type: 'multipleRecordLinks',
+  id: 'fldoeBG4ZdbKtb7Sn',
+  name: 'Supplier',
+  _relation: { table: 'Suppliers', cardinality: 'one' }
+}
+{
+  type: 'multipleRecordLinks',
+  id: 'flds2foxbPSIGJByx',
+  name: 'Attributes',
+  _relation: { table: 'Attributes', cardinality: 'many' }
+}
+{
+  type: 'multipleRecordLinks',
+  id: 'fldH1baRTEX1sypvw',
+  name: 'Suppliers 2',
+  _relation: { table: 'Suppliers', cardinality: 'many' }
+}
+{
+  type: 'multipleRecordLinks',
+  id: 'fldTnUWFxtse80q8M',
+  name: 'Location',
+  _relation: { table: 'Places', cardinality: 'many' }
+}
+Invoices has 1385 records. FK fields:
+{
+  type: 'multipleRecordLinks',
+  id: 'fldDSAQEDKBHJ6NFx',
+  name: 'InvoiceDetails',
+  _relation: { table: 'InvoiceDetails', cardinality: 'many' }
+}
+InvoiceDetails has 2020 records. FK fields:
+{
+  type: 'multipleRecordLinks',
+  id: 'fldpMZwBeY0CkbV17',
+  name: 'Invoice',
+  _relation: { table: 'Invoices', cardinality: 'one' }
+}
+{
+  type: 'multipleRecordLinks',
+  id: 'fldjScHKOiUFfu7iy',
+  name: 'EventDetail',
+  _relation: { table: 'EventDetails', cardinality: 'one' }
+}
+Planners has 10 records. FK fields:
+{
+  type: 'multipleRecordLinks',
+  id: 'fld6lfORYZJtisiLF',
+  name: 'Supplier',
+  _relation: { table: 'Suppliers', cardinality: 'one' }
+}
+{
+  type: 'multipleRecordLinks',
+  id: 'fld3Q6KQf1t6gtzzq',
+  name: 'Events',
+  _relation: { table: 'Events', cardinality: 'many' }
+}
+{
+  type: 'multipleRecordLinks',
+  id: 'fld7QhHW7wbANg4n2',
+  name: 'Enquiries',
+  _relation: { table: 'Enquiries', cardinality: 'many' }
+}
+{
+  type: 'multipleRecordLinks',
+  id: 'fld3EkcigGco9NwX7',
+  name: 'Destinations',
+  _relation: { table: 'Destinations', cardinality: 'many' }
+}
+{
+  type: 'multipleRecordLinks',
+  id: 'fldpJ7hDRVHYO2q4D',
+  name: 'EmailTemplates',
+  _relation: { table: 'EmailTemplates', cardinality: 'many' }
+}
+Services has 69 records. FK fields:
+{
+  type: 'multipleRecordLinks',
+  id: 'fldYOGymwuZkDto57',
+  name: 'Prices',
+  _relation: { table: 'Prices', cardinality: 'many' }
+}
+{
+  type: 'multipleRecordLinks',
+  id: 'fld8ERUaVtWrMrRxr',
+  name: 'Category',
+  _relation: { table: 'Categories', cardinality: 'one' }
+}
+{
+  type: 'multipleRecordLinks',
+  id: 'fldEqNwLaLzXb7rEM',
+  name: 'Packages',
+  _relation: { table: 'Packages', cardinality: 'many' }
+}
+{
+  type: 'multipleRecordLinks',
+  id: 'fld0Lso6qvc7BVXXt',
+  name: 'EventDetails',
+  _relation: { table: 'EventDetails', cardinality: 'many' }
+}
+{
+  type: 'multipleRecordLinks',
+  id: 'fldYflNVyWOkXsJfk',
+  name: 'EnquiryDetails',
+  _relation: { table: 'EnquiryDetails', cardinality: 'many' }
+}
+Packages has 35 records. FK fields:
+{
+  type: 'multipleRecordLinks',
+  id: 'fldwoDKdTzCQH44Yv',
+  name: 'Service',
+  _relation: { table: 'Services', cardinality: 'one' }
+}
+{
+  type: 'multipleRecordLinks',
+  id: 'fldEHGCJOFIk2glqa',
+  name: 'Prices',
+  _relation: { table: 'Prices', cardinality: 'many' }
+}
+Categories has 29 records. FK fields:
+{
+  type: 'multipleRecordLinks',
+  id: 'fldm7V32u6sHUs3EG',
+  name: 'Services',
+  _relation: { table: 'Services', cardinality: 'many' }
+}
+{
+  type: 'multipleRecordLinks',
+  id: 'fldAN60F5rfKcY4Mt',
+  name: 'Suppliers',
+  _relation: { table: 'Suppliers', cardinality: 'many' }
+}
+Enquiries has 2079 records. FK fields:
+{
+  type: 'multipleRecordLinks',
+  id: 'fldhH4fHOXGqhLIzt',
+  name: 'Destination',
+  _relation: { table: 'Destinations', cardinality: 'one' }
+}
+{
+  type: 'multipleRecordLinks',
+  id: 'fldXstzQqTumI7kN2',
+  name: 'Planner',
+  _relation: { table: 'Planners', cardinality: 'one' }
+}
+{
+  type: 'multipleRecordLinks',
+  id: 'fldf2AmRwGwIgaNIY',
+  name: 'EnquiryDetails',
+  _relation: { table: 'EnquiryDetails', cardinality: 'many' }
+}
+{
+  type: 'multipleRecordLinks',
+  id: 'fldh1Jhq6wi71oUrV',
+  name: 'Country',
+  _relation: { table: 'Places', cardinality: 'one' }
+}
+{
+  type: 'multipleRecordLinks',
+  id: 'fldcCob8D9MlOcnu9',
+  name: 'Venues',
+  _relation: { table: 'Venues', cardinality: 'many' }
+}
+EnquiryDetails has 22776 records. FK fields:
+{
+  type: 'multipleRecordLinks',
+  id: 'fldRVSPoaNkrEipOc',
+  name: 'Service',
+  _relation: { table: 'Services', cardinality: 'one' }
+}
+{
+  type: 'multipleRecordLinks',
+  id: 'fldq4QKtKvIzE9L2H',
+  name: 'Enquiry',
+  _relation: { table: 'Enquiries', cardinality: 'many' }
+}
+AddSupplierVenue has 201 records. FK fields:
+{
+  type: 'multipleRecordLinks',
+  id: 'fldprVsvVXk0difwU',
+  name: 'Country',
+  _relation: { table: 'Places', cardinality: 'one' }
+}
+{
+  type: 'multipleRecordLinks',
+  id: 'fld0A6d18xqKx9mQL',
+  name: 'Destinations',
+  _relation: { table: 'Places', cardinality: 'many' }
+}
+{
+  type: 'multipleRecordLinks',
+  id: 'fldoqSiPtInBA22vZ',
+  name: 'VenueType',
+  _relation: { table: 'VenueTypes', cardinality: 'many' }
+}
+Destinations has 16 records. FK fields:
+{
+  type: 'multipleRecordLinks',
+  id: 'fldC5mkLy3Q6WWS2f',
+  name: 'Places',
+  _relation: { table: 'Places', cardinality: 'many' }
+}
+{
+  type: 'multipleRecordLinks',
+  id: 'fldEaCzrNKCvQAXhv',
+  name: 'Prices',
+  _relation: { table: 'Prices', cardinality: 'many' }
+}
+{
+  type: 'multipleRecordLinks',
+  id: 'fldnrqHQkLZznAtta',
+  name: 'Events',
+  _relation: { table: 'Events', cardinality: 'many' }
+}
+{
+  type: 'multipleRecordLinks',
+  id: 'fldibTsDBeGOIJXpX',
+  name: 'Enquiries',
+  _relation: { table: 'Enquiries', cardinality: 'many' }
+}
+{
+  type: 'multipleRecordLinks',
+  id: 'fldk7h8VfLHnmllpC',
+  name: 'Planner',
+  _relation: { table: 'Planners', cardinality: 'one' }
+}
+{
+  type: 'multipleRecordLinks',
+  id: 'fldXZDhuSiLfCseGQ',
+  name: 'DiyEnquiries',
+  _relation: { table: 'DiyEnquiries', cardinality: 'many' }
+}
+Places has 689 records. FK fields:
+{
+  type: 'multipleRecordLinks',
+  id: 'fldm6KK7uD2cMl5CY',
+  name: 'PartOf',
+  _relation: { table: 'Places', cardinality: 'one' }
+}
+{
+  type: 'multipleRecordLinks',
+  id: 'fldrh4DI84OdF8RvZ',
+  name: 'Destination',
+  _relation: { table: 'Destinations', cardinality: 'one' }
+}
+{
+  type: 'multipleRecordLinks',
+  id: 'fldzxI3DNnOuHW0eS',
+  name: 'Currency',
+  _relation: { table: 'Currency', cardinality: 'one' }
+}
+{
+  type: 'multipleRecordLinks',
+  id: 'fld4FlaZYftwLy2UH',
+  name: 'ContactsCountry',
+  _relation: { table: 'Contacts', cardinality: 'many' }
+}
+{
+  type: 'multipleRecordLinks',
+  id: 'fldccBYTOIsHFvDbk',
+  name: 'AddSupplierVenue',
+  _relation: { table: 'AddSupplierVenue', cardinality: 'many' }
+}
+{
+  type: 'multipleRecordLinks',
+  id: 'fldfHHrHCOU01ZsKA',
+  name: 'CoveredBySuppliers',
+  _relation: { table: 'Suppliers', cardinality: 'many' }
+}
+{
+  type: 'multipleRecordLinks',
+  id: 'fldEPiK0HXW7uP5Ur',
+  name: 'ContactsLocation',
+  _relation: { table: 'Contacts', cardinality: 'many' }
+}
+{
+  type: 'multipleRecordLinks',
+  id: 'fldsVf58QSsLhABPu',
+  name: 'AddSupplierVenue 2',
+  _relation: { table: 'AddSupplierVenue', cardinality: 'many' }
+}
+{
+  type: 'multipleRecordLinks',
+  id: 'fldASssL8ZTizJpfb',
+  name: 'Enquiries',
+  _relation: { table: 'Enquiries', cardinality: 'many' }
+}
+Currency has 14 records. FK fields:
+{
+  type: 'multipleRecordLinks',
+  id: 'fld0g3Fy6z2yDLZyW',
+  name: 'Suppliers',
+  _relation: { table: 'Suppliers', cardinality: 'many' }
+}
+{
+  type: 'multipleRecordLinks',
+  id: 'fldkyet30dmVvpjVR',
+  name: 'EventDetails',
+  _relation: { table: 'EventDetails', cardinality: 'many' }
+}
+{
+  type: 'multipleRecordLinks',
+  id: 'fldKDnhnsUCaWk53i',
+  name: 'Places',
+  _relation: { table: 'Places', cardinality: 'many' }
+}
+Attributes has 641 records. FK fields:
+{
+  type: 'multipleRecordLinks',
+  id: 'fldDlPX2A0Pysewkg',
+  name: 'Contact',
+  _relation: { table: 'Contacts', cardinality: 'one' }
+}
+VenueFeatures has 71 records. FK fields:
+{
+  type: 'multipleRecordLinks',
+  id: 'fldllwlLS2lgvl5oT',
+  name: 'Venues',
+  _relation: { table: 'Venues', cardinality: 'many' }
+}
+VenueTypes has 49 records. FK fields:
+{
+  type: 'multipleRecordLinks',
+  id: 'fldkSXYlrhqbsQlCh',
+  name: 'Venues',
+  _relation: { table: 'Venues', cardinality: 'many' }
+}
+{
+  type: 'multipleRecordLinks',
+  id: 'fldMzHd5mVuxQeAli',
+  name: 'AddSupplierVenue',
+  _relation: { table: 'AddSupplierVenue', cardinality: 'many' }
+}
+EmailTemplates has 19 records. FK fields:
+{
+  type: 'multipleRecordLinks',
+  id: 'fldyifSZhUA53cXGp',
+  name: 'Planner',
+  _relation: { table: 'Planners', cardinality: 'many' }
+}
+DiySampleKitRequests has 12 records. FK fields:
+DiyEnquiries has 12 records. FK fields:
+{
+  type: 'multipleRecordLinks',
+  id: 'fldbPRS2Ol1rheWjq',
+  name: 'Destination',
+  _relation: { table: 'Destinations', cardinality: 'one' }
+}

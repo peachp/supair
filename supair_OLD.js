@@ -1,30 +1,39 @@
 require('dotenv').config()
-var _ = require('lodash')
 const axios = require('axios').default
 const { Sequelize, Op, Model, DataTypes } = require('sequelize')
 const { snakeCase } = require('change-case')
 var Airtable = require('airtable');
 const EventEmitter = require('events')
-const { createClient } = require('@supabase/supabase-js')
-const { promisify } = require('util')
-const sleep = promisify(setTimeout)
 
 
 class Emitter extends EventEmitter {}
 const EVENTS = new Emitter()
 WIP = {}
 
-var airtableMeta
-var airtable
-var baseName
-var META
-var supabase
-var fieldTypesIgnore
+//const { createClient } = require('@supabase/supabase-js')
+
+function rename(str) {
+  //str = str.replace(/ /g, '')
+  //str = snakeCase(str)
+  return str
+}
+function arr2obj(arr, keyProp = 'name') {
+  var obj = {}
+  for (let elem of arr) {
+    const key = elem[keyProp]
+    if (typeof key === 'number' || typeof key === 'string') {
+      obj[key] = {...elem}
+      delete obj[key][keyProp]
+    } else {
+      console.error(`Key ${keyProp} must be an integer or string, got:`, key)
+    }
+  }
+  return obj
+}
+
 var BASES
 var BASE = {}
 var MODELS = {}
-var RECS = {/** rec123sdfkj: {foo: 'bar'} */}
-var RECS_tables_done
 const FIELD_TYPES = { // TODO create test table with fiesl named like all types
   autoNumber:			        {type: DataTypes.INTEGER},
   barcode:			          {type: DataTypes.JSONB},
@@ -58,12 +67,13 @@ const FIELD_TYPES = { // TODO create test table with fiesl named like all types
   singleSelect:			      {type: DataTypes.STRING},
   url:			              {type: DataTypes.STRING},
 }
+const ACTIVE_BASES = ['PPW', 'PPW_TEST', 'CMS', ]
 // TODO move inside class, use arrow function to access via this?
 var lastRefresh
 var base
 
-
 module.exports = class Supair {
+  
   constructor({
     supabaseConnectionString,
     airtableApiKey,
@@ -76,17 +86,9 @@ module.exports = class Supair {
       define: {
         freezeTableName: true
       }
-    })
-    this.sequelize.authenticate().then(() => {
-        console.info('INFO - sequelize: database connected.')
-    })
-    .catch(err => {
-      console.error('ERROR - sequelize: unable to connect to the database:', err)
-    })
-    baseName = airtableBaseName
-    fieldTypesIgnore = airtableIgnoreFieldTypes || ['formula', 'multipleLookupValues', 'rollup']
-    airtable = new Airtable({apiKey: airtableApiKey})
-    airtableMeta = axios.create({
+    })    
+    
+    this.atMetadata = axios.create({
       baseURL: 'https://api.airtable.com/v0/meta/',
       timeout: 20000,
       headers: {
@@ -94,6 +96,10 @@ module.exports = class Supair {
         "Authorization": `Bearer ${airtableApiKey}`
       }
     })
+        
+    this.airtableBaseName = airtableBaseName
+    this.airtableIgnoreFieldTypes = airtableIgnoreFieldTypes || ['formula', 'multipleLookupValues', 'rollup']
+    this.airtable = new Airtable({apiKey: airtableApiKey})
     EVENTS.on('workStarted', (work, note, silent) => {
       WIP[work] = true
       if (!silent)
@@ -104,114 +110,74 @@ module.exports = class Supair {
       if (!silent)
         console.log(`✅️ ${work}: ${note || ''}`)
     })
-    console.log(`Create supabase client using SUPABASE_URL ${process.env.SUPABASE_URL}`)
-    supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY)  
+    // to listen for RT CUD events !!! infinite loop dager: avoid when coming from delta load
+    /// do this in startSync ?
+    //this.supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY)        
   }
 
-  async getMetaData() { //returns hybrid of enriched metadata and current Airtable metadata for further enrichment by the user
-    const basesMeta = await airtableMeta.get('bases')
-    META = _.find(basesMeta.data.bases, {name: baseName})
-    if (!META || !META.id) throw `Failed finding metadata for base '${baseName}'`
-    const tablesMeta = await airtableMeta.get(`bases/${META.id}/tables`)
-    if (!tablesMeta || !tablesMeta.data.tables) throw `Failed to get tables metadata for base '${baseName}'`
-    META.tables = _.keyBy(tablesMeta.data.tables, 'name')
-    for (let tableName in META.tables) {
-      META.tables[tableName].fields = _.keyBy(META.tables[tableName].fields, 'name')
-      delete META.tables[tableName].views
-    }
-    return META
-  }
+  async init(force = true, skipData = true) {
 
-  async createSqlSchema(metaData) {
-    META = metaData || META
-    console.log(META)
-    for (const TblNm in META.tables) {
-      const Table = META.tables[TblNm]
+    try {
+      await this.sequelize.authenticate();
+      console.log('Connection to Supabase SQL DB has been established successfully.');
+    } catch (error) {
+      console.error('Unable to connect to the Supabase SQL DB:', error);
+      return
+    }    
+
+    const basesRes = await this.atMetadata.get('bases')    
+    BASES = arr2obj(basesRes.data.bases)
+    console.log('BASES', BASES)
+    for (let bn in BASES) {
+      if (!BASES[bn] || !BASES[bn].id) {
+        console.error(`No Base found named ${this.airtableBaseName}`)
+      }
+      if (!ACTIVE_BASES.includes(bn)) {
+        console.log(`Base '${bn}' is not in the list of active bases => skip`)
+        continue
+      }
+      const tablesRes = await this.atMetadata.get(`bases/${BASES[bn].id}/tables`)
+      BASES[bn].TABLES = arr2obj(tablesRes.data.tables)
+      for (let tableName in BASES[bn].TABLES) {
+        const fields = [...BASES[bn].TABLES[tableName].fields]
+        delete BASES[bn].TABLES[tableName].fields
+        BASES[bn].TABLES[tableName].FIELDS = arr2obj(fields)
+      }
+    }    
+    BASE = BASES[this.airtableBaseName]
+    for (const [TblNm, Table] of Object.entries(BASE.TABLES)) {    
       var modelFields = {
         recid: {
           type: DataTypes.STRING,
           primaryKey: true,
         },
       }
-      for (const FldNm in Table.fields) {
-        const Field = Table.fields[FldNm]
-        if (fieldTypesIgnore.includes(Field.type)) {
+      for (const [FldNm, Field] of Object.entries(Table.FIELDS)) {
+        const typeConf = FIELD_TYPES[Field.type]
+        if (this.airtableIgnoreFieldTypes.includes(Field.type)) {
+          //console.log(`Ignore field type ${Field.type}`)
           continue
         }
+          
         modelFields[FldNm] = {
-          type: FIELD_TYPES[Field.type].type,
+          type: typeConf.type,
         }
       }
       console.log(`Define sqlz model: ${TblNm}`)
       MODELS[TblNm] = this.sequelize.define(TblNm, modelFields)
     }
+    console.log(`All sqlz models are ready to be synced to SQL.`)
+
+
     console.log("Sync all sqlz models to SQL....")
-    await this.sequelize.sync({alter: true}) // ❗
+    var syncParms = force ? {force: true} : {alter: true}
+    await this.sequelize.sync(syncParms) // ❗
     console.log("...all sqlz models were synced to SQL.")
     console.log(Object.keys(this.sequelize.models))
-  }
-
-  async syncData({at2pg, pg2at}) {
-    RECS_tables_done = new Set()
-    console.log(`Loading all data from base ${META.id} to detect links`)
-    for (let tableName in META.tables) {
-      airtable.base(META.id)(tableName).select({
-        //maxRecords: 100
-      }).eachPage(async function page(records, fetchNextPage) {
-        for (let record of records) {
-          RECS[record.id] = {
-            _recordId: record.id,
-            _tableName: tableName,
-            ...record.fields
-          }
-        }
-        fetchNextPage()
-      }, async function done(err) {
-        if (err) return console.error(err)
-        await sleep(3000)
-        console.log(`RECS_tables_done: ${tableName}`)
-        RECS_tables_done.add(tableName)
-      })
-    }
-  }
-
-  async createReferences() {
-    if (!META.tables || RECS_tables_done.size != _.size(META.tables))
-      return `...meta data is still being initialized. So far RECS selected ${_.size(RECS)}\n`  
-    for (let tableName in META.tables) {
-      //if (tableName != 'Venues') continue // TMP
-      const table = META.tables[tableName]
-      const allRecs = _.filter(RECS, {_tableName: tableName})
-      console.log(`${tableName} has ${_.size(allRecs)} records. FK fields:`)
-      for (let fieldName in table.fields) {
-        const field = table.fields[fieldName]
-        if (field.type == 'multipleRecordLinks') {
-          field._relation = {}
-          const anyRecWithLink = _.find(allRecs, rec => (rec[fieldName] && rec[fieldName].length > 0))
-          field._relation.table = RECS[anyRecWithLink[fieldName][0]]._tableName
-          const linksToMany = _.find(allRecs, rec => (rec[fieldName] && rec[fieldName].length > 1))
-          if (linksToMany) {
-            field._relation.cardinality = 'many'
-          } else {
-            field._relation.cardinality = 'one'
-          }
-          console.log(field)
-        }
-      }
-    }
-    let { data: sysconf, error } = await supabase.from('sysconf').select('*')
-    if (error) throw error
-    if (sysconf && sysconf.length) {
-      META = _.merge(META, sysconf[0].metadata)
-    }
-  }
-
-  async init_OLD(force = true, skipData = true) {
-
     
     if (skipData) return
 
-    base = airtable.base(BASE.id)
+    base = this.airtable.base(BASE.id)
     console.log(`Loading all data from Base id ${BASE.id}`)
     for (const [TblNm, Table] of Object.entries(BASE.TABLES)) {
       EVENTS.emit('workStarted', TblNm, 'initial load')
@@ -239,6 +205,7 @@ module.exports = class Supair {
       lastRefresh = new Date()
     }
   }
+
   async keepInSync(intervalInSec = 30) {
     setInterval(function(){
       const worksInProgress = Object.keys(WIP).length
@@ -291,5 +258,28 @@ module.exports = class Supair {
       lastRefresh = new Date() // TODO save per table in done()
     }, intervalInSec * 1000)    
   }
+
+  async getMetadata(baseName) {
+    if (baseName)
+      return BASES[baseName]
+    else
+      return BASES
+  }
 }
 
+// just some sample...
+const BASETABLESPrices = {
+  id: 'tblNIhFITOL4RVuyW',
+  primaryFieldId: 'fldO89ifoSzKY8DUs',
+  FIELDS: {
+    ID: { type: 'formula', id: 'fldO89ifoSzKY8DUs' },
+    Price: { type: 'formula', id: 'fldY7i0kwZH4zVr44' },
+    Cost: { type: 'currency', id: 'fldsU8hfuZZrDr8Mq' },
+    Destination: { type: 'multipleRecordLinks', id: 'fldNQg12MuGNEpT2r' },
+    Service: { type: 'multipleRecordLinks', id: 'fldyW18Fbvl3sO3dY' },
+    Markup: { type: 'currency', id: 'fldMQsouFmAK5EEA3' },
+    Info: { type: 'multilineText', id: 'fldWj9XsNN0aibaYX' },
+    Categories: { type: 'multipleLookupValues', id: 'fldY0ukiqmWsDr8my' },
+    Packages: { type: 'multipleRecordLinks', id: 'fldIvUVaAjhPjYqqK' }
+  }
+}
