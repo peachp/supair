@@ -24,7 +24,7 @@ var BASES
 var BASE = {}
 var MODELS = {}
 var RECS = {/** rec123sdfkj: {foo: 'bar'} */}
-var RECS_tables_done
+var RECORDS = {}
 const FIELD_TYPES = { // TODO create test table with fiesl named like all types
   autoNumber:			        {type: DataTypes.INTEGER},
   barcode:			          {type: DataTypes.JSONB},
@@ -107,104 +107,150 @@ module.exports = class Supair {
     console.log(`Create supabase client using SUPABASE_URL ${process.env.SUPABASE_URL}`)
     supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY)  
   }
-
-  async getMetaData() { //returns hybrid of enriched metadata and current Airtable metadata for further enrichment by the user
+  async init() {
     const basesMeta = await airtableMeta.get('bases')
     META = _.find(basesMeta.data.bases, {name: baseName})
     if (!META || !META.id) throw `Failed finding metadata for base '${baseName}'`
     const tablesMeta = await airtableMeta.get(`bases/${META.id}/tables`)
     if (!tablesMeta || !tablesMeta.data.tables) throw `Failed to get tables metadata for base '${baseName}'`
     META.tables = _.keyBy(tablesMeta.data.tables, 'name')
-    for (let tableName in META.tables) {
-      META.tables[tableName].fields = _.keyBy(META.tables[tableName].fields, 'name')
-      delete META.tables[tableName].views
+    for (let TblNm in META.tables) {
+      META.tables[TblNm].fields = _.keyBy(META.tables[TblNm].fields, 'name')
+      delete META.tables[TblNm].views
+    }
+    return new Promise((resolve, reject) => {      
+      var tblsToFetch = new Set(Object.keys(META.tables))
+      for (let TblNm in META.tables) {
+        airtable.base(META.id)(TblNm).select({
+          //maxRecords: 100
+        }).eachPage(async function page(records, fetchNextPage) {
+          for (let record of records) {
+            RECS[record.id] = {
+              _tableName: TblNm,
+              ...record.fields
+            }
+            if (!RECORDS[TblNm]) RECORDS[TblNm] = {}
+            RECORDS[TblNm][record.id] = RECS[record.id]
+          }
+          fetchNextPage()
+        }, async function done(err) {
+          if (err) {
+            console.error(err)
+            reject(err)
+          } 
+          setTimeout(() => {
+            console.log(`Fetched all records: ${TblNm}`)
+            tblsToFetch.delete(TblNm)
+            if (tblsToFetch.size == 0) {
+              resolve(Object.keys(RECS).length)
+            }
+          }, 3000);
+        })
+      }
+    })
+  }
+  generateMetaData() { //returns hybrid of enriched metadata and current Airtable metadata for further enrichment by the user
+    for (let TblNm in META.tables) { // save relations in META
+      const table = META.tables[TblNm]
+      const tblRecs = Object.values(RECORDS[TblNm])
+      for (let FldNm in table.fields) {
+        const field = table.fields[FldNm]
+        if (field.type == 'multipleRecordLinks') {                    
+          field._rel = {}
+          const linkingToNone = _.filter( tblRecs, rec => (!rec[FldNm] || rec[FldNm].length == 0) ) 
+          const linkingToAny  = _.filter( tblRecs, rec => (_.isArray(rec[FldNm]) && rec[FldNm].length) )
+          const linkingToOne  = _.filter( linkingToAny, rec => rec[FldNm].length == 1 )
+          const linkingToMany = _.filter( linkingToAny, rec => rec[FldNm].length > 1 )
+          if (linkingToAny && linkingToAny[0]) {
+            const recId = linkingToAny[0][FldNm][0]
+            field._rel.table = RECS[recId]._tableName
+            console.log(`${TblNm}.${FldNm} links to ${field._rel.table}`)
+            console.log(`..${tblRecs.length} records in total`)
+            console.log(`....${linkingToNone.length} records without links`)
+            console.log(`....${linkingToAny.length} records with links`)
+            console.log(`......${linkingToOne.length} to one record`)
+            console.log(`......${linkingToMany.length} to multiple records`)
+            console.log(` `)
+            field._rel.linksTo = (linkingToMany && linkingToMany.length) ? 'many' : 'one'
+            field._rel.mandatory = !linkingToNone || !linkingToNone.length
+          } else {
+            console.warn(`WARN - ${TblNm}.${FldNm} type is 'multipleRecordLinks', but none have links`)
+          }
+        }
+      }
     }
     return META
   }
-
-  async createSqlSchema(metaData) {
-    META = metaData || META
-    console.log(META)
-    for (const TblNm in META.tables) {
-      const Table = META.tables[TblNm]
+  async createSqlSchema(meta) {
+    meta = meta || META
+    for (let TblNm in META.tables) {
+      const table = META.tables[TblNm]
       var modelFields = {
-        recid: {
+        Id: {
           type: DataTypes.STRING,
           primaryKey: true,
         },
       }
-      for (const FldNm in Table.fields) {
-        const Field = Table.fields[FldNm]
-        if (fieldTypesIgnore.includes(Field.type)) {
+      for (let FldNm in table.fields) { // normal fields
+        const field = table.fields[FldNm]
+        if (fieldTypesIgnore.includes(field.type) || field.type == 'multipleRecordLinks') {
           continue
         }
-        modelFields[FldNm] = {
-          type: FIELD_TYPES[Field.type].type,
-        }
+        modelFields[FldNm] = { type: FIELD_TYPES[field.type].type }
       }
-      console.log(`Define sqlz model: ${TblNm}`)
       MODELS[TblNm] = this.sequelize.define(TblNm, modelFields)
     }
-    console.log("Sync all sqlz models to SQL....")
-    await this.sequelize.sync({alter: true}) // ❗
-    console.log("...all sqlz models were synced to SQL.")
-    console.log(Object.keys(this.sequelize.models))
-  }
-
-  async syncData({at2pg, pg2at}) {
-    RECS_tables_done = new Set()
-    console.log(`Loading all data from base ${META.id} to detect links`)
-    for (let tableName in META.tables) {
-      airtable.base(META.id)(tableName).select({
-        //maxRecords: 100
-      }).eachPage(async function page(records, fetchNextPage) {
-        for (let record of records) {
-          RECS[record.id] = {
-            _recordId: record.id,
-            _tableName: tableName,
-            ...record.fields
-          }
-        }
-        fetchNextPage()
-      }, async function done(err) {
-        if (err) return console.error(err)
-        await sleep(3000)
-        console.log(`RECS_tables_done: ${tableName}`)
-        RECS_tables_done.add(tableName)
-      })
-    }
-  }
-
-  async createReferences() {
-    if (!META.tables || RECS_tables_done.size != _.size(META.tables))
-      return `...meta data is still being initialized. So far RECS selected ${_.size(RECS)}\n`  
-    for (let tableName in META.tables) {
-      //if (tableName != 'Venues') continue // TMP
-      const table = META.tables[tableName]
-      const allRecs = _.filter(RECS, {_tableName: tableName})
-      console.log(`${tableName} has ${_.size(allRecs)} records. FK fields:`)
-      for (let fieldName in table.fields) {
-        const field = table.fields[fieldName]
-        if (field.type == 'multipleRecordLinks') {
-          field._relation = {}
-          const anyRecWithLink = _.find(allRecs, rec => (rec[fieldName] && rec[fieldName].length > 0))
-          field._relation.table = RECS[anyRecWithLink[fieldName][0]]._tableName
-          const linksToMany = _.find(allRecs, rec => (rec[fieldName] && rec[fieldName].length > 1))
-          if (linksToMany) {
-            field._relation.cardinality = 'many'
+    var refs = []
+    for (let TblNm in META.tables) {
+      const table = META.tables[TblNm]
+      console.log('-------------------------------------------')
+      for (let FldNm in table.fields) { // relations (associations)
+        const field = table.fields[FldNm]
+        if (field._rel) {
+          const this_rel = field._rel
+          const otherFK = _.find(META.tables[this_rel.table].fields, oFld => {
+            return oFld._rel && oFld._rel.table == TblNm
+          })
+          const other_rel = META.tables[this_rel.table].fields[otherFK.name]._rel
+          console.log(`${TblNm} linksTo ${this_rel.linksTo} ${this_rel.table}
+              ${this_rel.table} linksTo ${other_rel.linksTo} ${TblNm} `)
+      
+          const ThisModel = MODELS[TblNm]
+          const OtherModel = MODELS[this_rel.table]
+          if (this_rel.linksTo == 'one' && other_rel.linksTo == 'one') {
+            // Places 1:1 Places ...?
+            // better add inheritance manually?
+            if (this_rel.mandatory) {
+              // ThisModel.belongsTo(OtherModel)
+              // refs.push(`${TblNm}.${FldNm} belongsTo ${this_rel.table} (1:1)`)
+            } else {
+              // ThisModel.hasOne(OtherModel)
+              // refs.push(`${TblNm}.${FldNm} hasOne ${this_rel.table} (1:1)`)              
+            }
+          } else if (this_rel.linksTo == 'one' && other_rel.linksTo == 'many') {
+            ThisModel.belongsTo(OtherModel)
+            refs.push(`${TblNm}.${FldNm} belongsTo ${this_rel.table}`)
+          }/*  else if (this_rel.linksTo == 'many' && other_rel.linksTo == 'one') {
+            ThisModel.hasMany(OtherModel)
+            refs.push(`${TblNm}.${FldNm} hasMany ${this_rel.table}`)
+          } */ else if (this_rel.linksTo == 'many' && other_rel.linksTo == 'many') {
+            const nmRelTblName = [TblNm, this_rel.table].sort().join('_')
+            ThisModel.belongsToMany(OtherModel, { through: nmRelTblName })
+            refs.push(`${TblNm}.${FldNm} belongsToMany ${this_rel.table} through ${nmRelTblName}`)
           } else {
-            field._relation.cardinality = 'one'
+            throw `Cannot detect relation on ${TblNm}.${FldNm}`
           }
-          console.log(field)
+          console.log('-')
         }
       }
     }
-    let { data: sysconf, error } = await supabase.from('sysconf').select('*')
-    if (error) throw error
-    if (sysconf && sysconf.length) {
-      META = _.merge(META, sysconf[0].metadata)
-    }
+    refs.map(r => console.log(r))
+    await this.sequelize.sync({force: true}) // ❗
+    console.log("...all sqlz models were synced to SQL.")
+    console.log(Object.keys(this.sequelize.models))
+    return true
   }
+
 
   async init_OLD(force = true, skipData = true) {
 
@@ -213,7 +259,7 @@ module.exports = class Supair {
 
     base = airtable.base(BASE.id)
     console.log(`Loading all data from Base id ${BASE.id}`)
-    for (const [TblNm, Table] of Object.entries(BASE.TABLES)) {
+    for (const [TblNm, table] of Object.entries(BASE.TABLES)) {
       EVENTS.emit('workStarted', TblNm, 'initial load')
       base(TblNm).select({}).eachPage(async function page(records, fetchNextPage) {
         var sqlRecs = []
@@ -254,7 +300,7 @@ module.exports = class Supair {
       // ! need to generate formula here, and not on each select, because lastRefresh is updated before all selects eventually finish
       const formula = `IS_AFTER(LAST_MODIFIED_TIME(), '${lastRefresh.toISOString()}')`
       console.log(`⏩️ ${timeStamp}: No WORKs in progress => scan for records in Airtable using formula: ${formula}`)
-      for (const [TblNm, Table] of Object.entries(BASE.TABLES)) {
+      for (const [TblNm, table] of Object.entries(BASE.TABLES)) {
         EVENTS.emit('workStarted', `${TblNm}_delta`, '', true)
         base(TblNm).select({
           filterByFormula: formula
