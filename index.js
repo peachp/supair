@@ -8,17 +8,12 @@ var supair = new Supair({
   supabaseConnectionString: process.env.SUPABASE_DB_CONN,  
 })
 
-/**
- * Natural or surrogate PK?
- * How to deal with n:m?
- */
 
 async function init() {
-  const totalRecs = await supair.init()
-  console.log(`Basic meta set, all records fetched: ${totalRecs}`)  
-  const metaData = supair.generateMetaData()
-  // optionally enrich metaData e.g. with mandatory fields, onDelete: 'RESTRICT' etc.
-  supair.createSqlSchema(metaData) // or pass nothing to use default meta data
+  await supair.init()
+  await supair.generateMetaData()
+  await supair.createBasicSchema()
+  await supair.insertData()
 }
 
 init()

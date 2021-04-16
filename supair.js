@@ -1,13 +1,19 @@
 require('dotenv').config()
 var _ = require('lodash')
 const axios = require('axios').default
-const { Sequelize, Op, Model, DataTypes } = require('sequelize')
 const { snakeCase } = require('change-case')
 var Airtable = require('airtable');
 const EventEmitter = require('events')
 const { createClient } = require('@supabase/supabase-js')
-const { promisify } = require('util')
-const sleep = promisify(setTimeout)
+const { Client } = require('pg')
+const pg = new Client({
+  connectionString: process.env.SUPABASE_DB_CONN,
+})
+function sleep(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
 
 
 class Emitter extends EventEmitter {}
@@ -18,73 +24,70 @@ var airtableMeta
 var airtable
 var baseName
 var META
-var supabase
-var fieldTypesIgnore
+var FIELD_TYPES_IGNORE = ['multipleLookupValues', 'rollup', 'lastModifiedTime']
 var BASES
 var BASE = {}
 var MODELS = {}
 var RECS = {/** rec123sdfkj: {foo: 'bar'} */}
 var RECORDS = {}
-const FIELD_TYPES = { // TODO create test table with fiesl named like all types
-  autoNumber:			        {type: DataTypes.INTEGER},
-  barcode:			          {type: DataTypes.JSONB},
-  button:			            {type: DataTypes.JSONB},
-  checkbox:			          {type: DataTypes.BOOLEAN},
-  count:			            {type: DataTypes.INTEGER},
-  createdBy:			        {type: DataTypes.JSONB},
-  createdTime:			      {type: DataTypes.DATE},
-  currency:			          {type: DataTypes.FLOAT},
-  date:			              {type: DataTypes.DATEONLY},
-  dateTime:			          {type: DataTypes.DATE},
-  duration:			          {type: DataTypes.INTEGER},
-  email:			            {type: DataTypes.STRING},
-  formula:			          {type: DataTypes.TEXT},
-  lastModifiedBy:			    {type: DataTypes.JSONB},
-  lastModifiedTime:	      {type: DataTypes.DATE},
-  multilineText:			    {type: DataTypes.TEXT},
-  multipleAttachments:    {type: DataTypes.JSONB},
-  multipleCollaborators:	{type: DataTypes.JSONB},
-  multipleLookupValues:	  {type: DataTypes.JSONB},
-  multipleRecordLinks:    {type: DataTypes.ARRAY(DataTypes.STRING)},
-  multipleSelects:	      {type: DataTypes.ARRAY(DataTypes.STRING)},
-  number:			            {type: DataTypes.INTEGER},
-  percent:			          {type: DataTypes.FLOAT},
-  phoneNumber:			      {type: DataTypes.STRING},
-  rating:			            {type: DataTypes.INTEGER},
-  richText:			          {type: DataTypes.TEXT},
-  rollup:			            {type: DataTypes.TEXT},
-  singleCollaborator:		  {type: DataTypes.JSONB},
-  singleLineText:			    {type: DataTypes.TEXT},
-  singleSelect:			      {type: DataTypes.STRING},
-  url:			              {type: DataTypes.STRING},
+const FIELD_TYPES = {
+  autoNumber:			        'INTEGER',
+  barcode:			          'JSON',
+  button:			            'JSON',
+  checkbox:			          'BOOLEAN',
+  count:			            'INTEGER',
+  createdBy:			        'JSON',
+  createdTime:			      'TIMESTAMPTZ',
+  currency:			          'NUMERIC(12,2)',
+  date:			              'DATE',
+  dateTime:			          'TIMESTAMPTZ',
+  duration:			          'INTEGER',
+  email:			            'TEXT',
+  formula:			          'TEXT',
+  lastModifiedBy:			    'JSON',
+  lastModifiedTime:	      'TIMESTAMPTZ',
+  multilineText:			    'TEXT',
+  multipleAttachments:    'JSON',
+  multipleCollaborators:	'JSON',
+  multipleLookupValues:	  'JSON',
+  multipleRecordLinks:    'TEXT',
+  multipleSelects:	      'TEXT []',
+  number:			            'INTEGER',
+  percent:			          'NUMERIC(12,2)',
+  phoneNumber:			      'TEXT',
+  rating:			            'INTEGER',
+  richText:			          'TEXT',
+  rollup:			            'TEXT',
+  singleCollaborator:		  'JSON',
+  singleLineText:			    'TEXT',
+  singleSelect:			      'TEXT',
+  url:			              'TEXT',
 }
-// TODO move inside class, use arrow function to access via this?
+var SQL = {
+  createTables: {
+    /* TableA: {
+        fields: []
+    } */
+  },
+  addFKs: [],
+  createTablesNM: {
+    /* TableA: {
+        fields: []
+    } */
+  },
+}
+
 var lastRefresh
 var base
-
 
 module.exports = class Supair {
   constructor({
     supabaseConnectionString,
     airtableApiKey,
     airtableMetadataApiKey,
-    airtableBaseName,
-    airtableIgnoreFieldTypes,
+    airtableBaseName
   }) {    
-    this.sequelize = new Sequelize(supabaseConnectionString, {
-      logging: false,
-      define: {
-        freezeTableName: true
-      }
-    })
-    this.sequelize.authenticate().then(() => {
-        console.info('INFO - sequelize: database connected.')
-    })
-    .catch(err => {
-      console.error('ERROR - sequelize: unable to connect to the database:', err)
-    })
     baseName = airtableBaseName
-    fieldTypesIgnore = airtableIgnoreFieldTypes || ['formula', 'multipleLookupValues', 'rollup']
     airtable = new Airtable({apiKey: airtableApiKey})
     airtableMeta = axios.create({
       baseURL: 'https://api.airtable.com/v0/meta/',
@@ -104,10 +107,9 @@ module.exports = class Supair {
       if (!silent)
         console.log(`✅️ ${work}: ${note || ''}`)
     })
-    console.log(`Create supabase client using SUPABASE_URL ${process.env.SUPABASE_URL}`)
-    supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY)  
   }
-  async init() {
+  async init() {    
+    await pg.connect()
     const basesMeta = await airtableMeta.get('bases')
     META = _.find(basesMeta.data.bases, {name: baseName})
     if (!META || !META.id) throw `Failed finding metadata for base '${baseName}'`
@@ -115,7 +117,13 @@ module.exports = class Supair {
     if (!tablesMeta || !tablesMeta.data.tables) throw `Failed to get tables metadata for base '${baseName}'`
     META.tables = _.keyBy(tablesMeta.data.tables, 'name')
     for (let TblNm in META.tables) {
-      META.tables[TblNm].fields = _.keyBy(META.tables[TblNm].fields, 'name')
+      const allFieldsArr = _.cloneDeep(META.tables[TblNm].fields)
+      META.tables[TblNm].fields = {}
+      for (let field of allFieldsArr) {
+        if (field.id == META.tables[TblNm].primaryFieldId || !FIELD_TYPES_IGNORE.includes(field.type)) {
+          META.tables[TblNm].fields[field.name] = field
+        }
+      }
       delete META.tables[TblNm].views
     }
     return new Promise((resolve, reject) => {      
@@ -124,8 +132,10 @@ module.exports = class Supair {
         airtable.base(META.id)(TblNm).select({
           //maxRecords: 100
         }).eachPage(async function page(records, fetchNextPage) {
+          console.log(`...fetched ${records.length} ${TblNm}`)
           for (let record of records) {
             RECS[record.id] = {
+              id: record.id,
               _tableName: TblNm,
               ...record.fields
             }
@@ -139,7 +149,7 @@ module.exports = class Supair {
             reject(err)
           } 
           setTimeout(() => {
-            console.log(`Fetched all records: ${TblNm}`)
+            console.log(`Fetched all: ${TblNm}`)
             tblsToFetch.delete(TblNm)
             if (tblsToFetch.size == 0) {
               resolve(Object.keys(RECS).length)
@@ -150,7 +160,7 @@ module.exports = class Supair {
     })
   }
   generateMetaData() { //returns hybrid of enriched metadata and current Airtable metadata for further enrichment by the user
-    for (let TblNm in META.tables) { // save relations in META
+    for (let TblNm in META.tables) { // ! run full loop because links will be examined on both sides later
       const table = META.tables[TblNm]
       const tblRecs = Object.values(RECORDS[TblNm])
       for (let FldNm in table.fields) {
@@ -163,6 +173,8 @@ module.exports = class Supair {
           const linkingToMany = _.filter( linkingToAny, rec => rec[FldNm].length > 1 )
           if (linkingToAny && linkingToAny[0]) {
             const recId = linkingToAny[0][FldNm][0]
+            if (!recId) console.error(`no recId`, linkingToAny[0][FldNm])
+            if (!RECS[recId]) console.error(`no REC with recId ${recId} (used as link in field ${FldNm} in:)`, linkingToAny[0])
             field._rel.table = RECS[recId]._tableName
             console.log(`${TblNm}.${FldNm} links to ${field._rel.table}`)
             console.log(`..${tblRecs.length} records in total`)
@@ -174,168 +186,149 @@ module.exports = class Supair {
             field._rel.linksTo = (linkingToMany && linkingToMany.length) ? 'many' : 'one'
             field._rel.mandatory = !linkingToNone || !linkingToNone.length
           } else {
-            console.warn(`WARN - ${TblNm}.${FldNm} type is 'multipleRecordLinks', but none have links`)
+            console.warn(`WARN - ${TblNm}.${FldNm} type is 'multipleRecordLinks', but failed to guess the relation because the field is empty`)
           }
         }
       }
     }
     return META
   }
-  async createSqlSchema(meta) {
+  validateData() {
+    // first (PK) column is actually unique & not empty etc.
+  }
+  async createBasicSchema(meta) {
     meta = meta || META
-    for (let TblNm in META.tables) {
-      const table = META.tables[TblNm]
-      var modelFields = {
-        Id: {
-          type: DataTypes.STRING,
-          primaryKey: true,
-        },
-      }
-      for (let FldNm in table.fields) { // normal fields
-        const field = table.fields[FldNm]
-        if (fieldTypesIgnore.includes(field.type) || field.type == 'multipleRecordLinks') {
-          continue
-        }
-        modelFields[FldNm] = { type: FIELD_TYPES[field.type].type }
-      }
-      MODELS[TblNm] = this.sequelize.define(TblNm, modelFields)
+    function otherRel(TblNm, FldNm) {
+      const this_rel = META.tables[TblNm].fields[FldNm]._rel
+      const otherFK = _.find(META.tables[this_rel.table].fields, otherFld => {
+        return otherFld._rel && otherFld._rel.table == TblNm
+      })
+      return META.tables[this_rel.table].fields[otherFK.name]._rel
     }
-    var refs = []
     for (let TblNm in META.tables) {
       const table = META.tables[TblNm]
-      console.log('-------------------------------------------')
-      for (let FldNm in table.fields) { // relations (associations)
+      SQL.createTables[TblNm] = {
+        fields: []
+      }
+      SQL.createTables[TblNm].fields.push(`"id" TEXT PRIMARY KEY`)
+      for (let FldNm in table.fields) {
         const field = table.fields[FldNm]
-        if (field._rel) {
+        if (field.type == 'multipleRecordLinks') {
           const this_rel = field._rel
-          const otherFK = _.find(META.tables[this_rel.table].fields, oFld => {
-            return oFld._rel && oFld._rel.table == TblNm
-          })
-          const other_rel = META.tables[this_rel.table].fields[otherFK.name]._rel
-          console.log(`${TblNm} linksTo ${this_rel.linksTo} ${this_rel.table}
-              ${this_rel.table} linksTo ${other_rel.linksTo} ${TblNm} `)
-      
-          const ThisModel = MODELS[TblNm]
-          const OtherModel = MODELS[this_rel.table]
+          const other_rel = otherRel(TblNm, FldNm)
+          console.log(`${TblNm} linksTo ${this_rel.linksTo} ${this_rel.table} --- ${this_rel.table} linksTo ${other_rel.linksTo} ${TblNm} `)
           if (this_rel.linksTo == 'one' && other_rel.linksTo == 'one') {
-            // Places 1:1 Places ...?
-            // better add inheritance manually?
+            // Places self ref Places...?
             if (this_rel.mandatory) {
-              // ThisModel.belongsTo(OtherModel)
-              // refs.push(`${TblNm}.${FldNm} belongsTo ${this_rel.table} (1:1)`)
+              this_rel.link = '1:1'
+              SQL.createTables[TblNm].fields.push(`"${FldNm}" TEXT`)
+              SQL.addFKs.push(`ALTER TABLE ONLY "${TblNm}" ADD CONSTRAINT "fk_${this_rel.table}" FOREIGN KEY("${FldNm}") REFERENCES "${this_rel.table}"("id") ON DELETE SET NULL;`)
+              SQL.addFKs.push(`ALTER TABLE ONLY "${TblNm}" ALTER COLUMN "${FldNm}" SET NOT NULL;`)              
             } else {
-              // ThisModel.hasOne(OtherModel)
-              // refs.push(`${TblNm}.${FldNm} hasOne ${this_rel.table} (1:1)`)              
+              // ?
             }
           } else if (this_rel.linksTo == 'one' && other_rel.linksTo == 'many') {
-            ThisModel.belongsTo(OtherModel)
-            refs.push(`${TblNm}.${FldNm} belongsTo ${this_rel.table}`)
-          }/*  else if (this_rel.linksTo == 'many' && other_rel.linksTo == 'one') {
-            ThisModel.hasMany(OtherModel)
-            refs.push(`${TblNm}.${FldNm} hasMany ${this_rel.table}`)
-          } */ else if (this_rel.linksTo == 'many' && other_rel.linksTo == 'many') {
-            const nmRelTblName = [TblNm, this_rel.table].sort().join('_')
-            ThisModel.belongsToMany(OtherModel, { through: nmRelTblName })
-            refs.push(`${TblNm}.${FldNm} belongsToMany ${this_rel.table} through ${nmRelTblName}`)
+            this_rel.link = 'n:1'
+            SQL.createTables[TblNm].fields.push(`"${FldNm}" TEXT`)
+            SQL.addFKs.push(`ALTER TABLE ONLY "${TblNm}" ADD CONSTRAINT "fk_${this_rel.table}" FOREIGN KEY("${FldNm}") REFERENCES "${this_rel.table}"("id") ON DELETE SET NULL;`)
+          } else if (this_rel.linksTo == 'many' && other_rel.linksTo == 'one') {
+            // do nothing ..it's an Airtable thing to have FK on both sides...
+          } else if (this_rel.linksTo == 'many' && other_rel.linksTo == 'many') {
+            this_rel.link = 'n:m'
+            const nmTblName = [TblNm, this_rel.table].sort().join('_')
+            console.log(`...TODO create, alter to add column table "${nmTblName}" for the n:m relation`)
+            if (!SQL.createTablesNM[nmTblName]) {
+              SQL.createTablesNM[nmTblName] = `CREATE TABLE IF NOT EXISTS "${nmTblName}" (
+                "${TblNm}_rid" TEXT,
+                "${this_rel.table}_rid" TEXT,
+                PRIMARY KEY ("${TblNm}_rid", "${this_rel.table}_rid") );
+              `
+              SQL.addFKs.push(`ALTER TABLE ONLY "${nmTblName}" ADD CONSTRAINT "fk_${TblNm}" FOREIGN KEY("${TblNm}_rid") REFERENCES "${TblNm}"("id") ON DELETE SET NULL;`)
+              SQL.addFKs.push(`ALTER TABLE ONLY "${nmTblName}" ADD CONSTRAINT "fk_${this_rel.table}" FOREIGN KEY("${this_rel.table}_rid") REFERENCES "${this_rel.table}"("id") ON DELETE SET NULL;`)              
+            }
           } else {
-            throw `Cannot detect relation on ${TblNm}.${FldNm}`
+            console.warn(`Cannot detect relation on ${TblNm}.${FldNm}; this_rel, other_rel:`)
+            console.log(this_rel)
+            console.log(other_rel)            
           }
-          console.log('-')
-        }
+          console.log(' ')                  
+        } else {
+          SQL.createTables[TblNm].fields.push(`"${FldNm}" ${FIELD_TYPES[field.type]}`)
+        }                
       }
     }
-    refs.map(r => console.log(r))
-    await this.sequelize.sync({force: true}) // ❗
-    console.log("...all sqlz models were synced to SQL.")
-    console.log(Object.keys(this.sequelize.models))
-    return true
-  }
 
-
-  async init_OLD(force = true, skipData = true) {
-
+    for (let TblNm in SQL.createTables) {
+      const delres = await pg.query(`DROP TABLE IF EXISTS "${TblNm}" CASCADE`)
+      console.log(delres.command ? `${delres.command} ${TblNm}` : 'Error in DROP query')
+      await sleep(200)
+      const Q = `CREATE TABLE IF NOT EXISTS "${TblNm}" (\n${SQL.createTables[TblNm].fields.join(',\n')} );`
+      console.log(Q)
+      const cres = await pg.query(Q)
+      console.log(cres.command ? `${cres.command} ${TblNm}` : 'Error in CREATE query')
+      await sleep(200)
+    }
     
-    if (skipData) return
-
-    base = airtable.base(BASE.id)
-    console.log(`Loading all data from Base id ${BASE.id}`)
-    for (const [TblNm, table] of Object.entries(BASE.TABLES)) {
-      EVENTS.emit('workStarted', TblNm, 'initial load')
-      base(TblNm).select({}).eachPage(async function page(records, fetchNextPage) {
-        var sqlRecs = []
-        for (let record of records) {
-          var sqlRec = {
-            recid: record.id,
-            ...record.fields
-          }
-          sqlRecs.push(sqlRec)
-        }
-        try {
-          const inserted = await MODELS[TblNm].bulkCreate(sqlRecs, { validate: true })
-        } catch (error) {
-          console.log(`ERROR while bulkInserting into ${TblNm}`)
-          console.log(error)
-          process.exit()
-        }
-        fetchNextPage()
-      }, async function done(err) {
-        if (err) { console.error(err); return; }
-        EVENTS.emit('workFinished', TblNm, 'initial load')
-      })
-      lastRefresh = new Date()
+    return
+    for (let nmTblNm in SQL.createTablesNM) {
+      console.log(SQL.createTablesNM[nmTblNm])
     }
+
+    return
   }
-  async keepInSync(intervalInSec = 30) {
-    setInterval(function(){
-      const worksInProgress = Object.keys(WIP).length
-      const timeStamp = new Date().toTimeString().slice(0,8)
-      if (worksInProgress > 0) {
-        console.log(`❌️ ${timeStamp}: attempting delta load from Airtable -----> ${worksInProgress} WORKs in progress => try next interval!`)
-        return
-      }
-      if (!lastRefresh) {
-        console.log(`last refresh time not set yet due to incomplete init, skip, try next interval!`)
-        return
-      }
-      // ! need to generate formula here, and not on each select, because lastRefresh is updated before all selects eventually finish
-      const formula = `IS_AFTER(LAST_MODIFIED_TIME(), '${lastRefresh.toISOString()}')`
-      console.log(`⏩️ ${timeStamp}: No WORKs in progress => scan for records in Airtable using formula: ${formula}`)
-      for (const [TblNm, table] of Object.entries(BASE.TABLES)) {
-        EVENTS.emit('workStarted', `${TblNm}_delta`, '', true)
-        base(TblNm).select({
-          filterByFormula: formula
-        }).eachPage(async function page(records, fetchNextPage) {
-          var sqlRecs = []
-          //console.log(`...${records.length} ${TblNm} modified records selected from Airtable`)
-          for (let record of records) {
-            var sqlRec = {
-              recid: record.id,
-              ...record.fields
-            }
-            sqlRecs.push(sqlRec)
+  async insertData(params) {
+    var supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY)
+    //console.log(META.tables.EventDetails)
+    function at2sb(rec) {
+      let sqlRec = { id: rec.id }
+      const TblNm = rec._tableName
+      delete rec._tableName
+      delete rec.id
+      for (let FldNm in META.tables[TblNm].fields) {
+        const field = META.tables[TblNm].fields[FldNm]
+        if (!(FldNm in rec) || !rec[FldNm]) {
+          sqlRec[FldNm] = null
+          continue
+        }
+        if (field.type == 'multipleRecordLinks') {
+          if (field._rel.link == 'n:1' || field._rel.link == '1:1') {
+            sqlRec[FldNm] = rec[FldNm][0] // first recId
           }
-          if (sqlRecs && sqlRecs.length) {
-            const flds = Object.keys(records[0].fields)
-            try {
-              const upserterd = await MODELS[TblNm].bulkCreate(
-                sqlRecs,
-                {updateOnDuplicate: flds}
-              ) // UPSERT!
-              console.log(`${upserterd.length} ${TblNm} modified recs upserted in SQL`)              
-            } catch (error) {
-              console.log(`ERROR while bulk upsert`)
-              console.log(error)
-              process.exit()
-            }
-          }          
-          fetchNextPage()          
-        }, async function done(err) {
-          if (err) { console.error(err); return; }
-          EVENTS.emit('workFinished', `${TblNm}_delta`, '', true)
-        })
+        } else {
+          sqlRec[FldNm] = rec[FldNm]
+        }
       }
-      lastRefresh = new Date() // TODO save per table in done()
-    }, intervalInSec * 1000)    
+      return sqlRec
+    }
+    for (let TblNm in RECORDS) {
+      let chunks = _.chunk(Object.values(RECORDS[TblNm]), 5)
+      //console.log(`########## ${chunks.length} chunks of 100 ${TblNm} records`)
+      for (let chunk of chunks) {
+        const sqlRecs = chunk.map(rec => at2sb(rec))
+        //const tstRec = _.find(sqlRecs, {ID: 'Kalyn & Dana - Videography 4hrs'})
+        //if (!tstRec) continue
+        //console.log( tstRec )
+        if (TblNm != 'Events') continue // TESTING
+        const res = await supabase
+          .from(TblNm)
+          .insert(sqlRecs)
+        
+        if (res.data) {
+          console.log(`inserted ${TblNm}:`)
+          console.log(res.data.map(row => row.id))
+        } else {
+          console.log(`error while inserting ${TblNm}:`)
+          console.log(res.error)
+          console.log(sqlRecs)          
+        }
+        
+      }
+    }
+    //pg.end()
+  }
+  async addConstraints() {
+    for (let constr of SQL.addFKs) {
+      console.log(constr)
+    }
   }
 }
-
