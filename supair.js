@@ -52,7 +52,7 @@ const FIELD_TYPES = {
   multipleLookupValues:	  'JSON',
   multipleRecordLinks:    'TEXT',
   multipleSelects:	      'TEXT []',
-  number:			            'INTEGER',
+  number:			            'NUMERIC(12,2)',
   percent:			          'NUMERIC(12,2)',
   phoneNumber:			      'TEXT',
   rating:			            'INTEGER',
@@ -216,11 +216,11 @@ module.exports = class Supair {
         if (field.type == 'multipleRecordLinks') {
           const this_rel = field._rel
           const other_rel = otherRel(TblNm, FldNm)
-          console.log(`${TblNm} linksTo ${this_rel.linksTo} ${this_rel.table} --- ${this_rel.table} linksTo ${other_rel.linksTo} ${TblNm} `)
+          //console.log(`${TblNm} linksTo ${this_rel.linksTo} ${this_rel.table} --- ${this_rel.table} linksTo ${other_rel.linksTo} ${TblNm} `)
           if (this_rel.linksTo == 'one' && other_rel.linksTo == 'one') {
             // Places self ref Places...?
             if (this_rel.mandatory) {
-              this_rel.link = '1:1'
+              this_rel.link = '1:1'              
               SQL.createTables[TblNm].fields.push(`"${FldNm}" TEXT`)
               SQL.addFKs.push(`ALTER TABLE ONLY "${TblNm}" ADD CONSTRAINT "fk_${this_rel.table}" FOREIGN KEY("${FldNm}") REFERENCES "${this_rel.table}"("id") ON DELETE SET NULL;`)
               SQL.addFKs.push(`ALTER TABLE ONLY "${TblNm}" ALTER COLUMN "${FldNm}" SET NOT NULL;`)              
@@ -232,25 +232,29 @@ module.exports = class Supair {
             SQL.createTables[TblNm].fields.push(`"${FldNm}" TEXT`)
             SQL.addFKs.push(`ALTER TABLE ONLY "${TblNm}" ADD CONSTRAINT "fk_${this_rel.table}" FOREIGN KEY("${FldNm}") REFERENCES "${this_rel.table}"("id") ON DELETE SET NULL;`)
           } else if (this_rel.linksTo == 'many' && other_rel.linksTo == 'one') {
-            // do nothing ..it's an Airtable thing to have FK on both sides...
+            this_rel.link = '1:n'
+            //delete META.tables[TblNm].fields[FldNm]
+            // ...it's an Airtable thing to have FK on both sides...
           } else if (this_rel.linksTo == 'many' && other_rel.linksTo == 'many') {
             this_rel.link = 'n:m'
             const nmTblName = [TblNm, this_rel.table].sort().join('_')
-            console.log(`...TODO create, alter to add column table "${nmTblName}" for the n:m relation`)
+            // TODO create, alter to add column table "${nmTblName}" for the n:m relation
             if (!SQL.createTablesNM[nmTblName]) {
               SQL.createTablesNM[nmTblName] = `CREATE TABLE IF NOT EXISTS "${nmTblName}" (
-                "${TblNm}_rid" TEXT,
-                "${this_rel.table}_rid" TEXT,
-                PRIMARY KEY ("${TblNm}_rid", "${this_rel.table}_rid") );
+                "${TblNm}_id" TEXT,
+                "${this_rel.table}_id" TEXT,
+                PRIMARY KEY ("${TblNm}_id", "${this_rel.table}_id") );
               `
-              SQL.addFKs.push(`ALTER TABLE ONLY "${nmTblName}" ADD CONSTRAINT "fk_${TblNm}" FOREIGN KEY("${TblNm}_rid") REFERENCES "${TblNm}"("id") ON DELETE SET NULL;`)
-              SQL.addFKs.push(`ALTER TABLE ONLY "${nmTblName}" ADD CONSTRAINT "fk_${this_rel.table}" FOREIGN KEY("${this_rel.table}_rid") REFERENCES "${this_rel.table}"("id") ON DELETE SET NULL;`)              
+              SQL.addFKs.push(`ALTER TABLE ONLY "${nmTblName}" ADD CONSTRAINT "fk_${TblNm}" FOREIGN KEY("${TblNm}_id") REFERENCES "${TblNm}"("id") ON DELETE SET NULL;`)
+              SQL.addFKs.push(`ALTER TABLE ONLY "${nmTblName}" ADD CONSTRAINT "fk_${this_rel.table}" FOREIGN KEY("${this_rel.table}_id") REFERENCES "${this_rel.table}"("id") ON DELETE SET NULL;`)              
+              //delete META.tables[TblNm].fields[FldNm]
             }
           } else {
             console.warn(`Cannot detect relation on ${TblNm}.${FldNm}; this_rel, other_rel:`)
             console.log(this_rel)
             console.log(other_rel)            
           }
+          console.log(`${TblNm}.${FldNm} ---${this_rel.link}--> ${this_rel.table}`)
           console.log(' ')                  
         } else {
           SQL.createTables[TblNm].fields.push(`"${FldNm}" ${FIELD_TYPES[field.type]}`)
@@ -263,7 +267,7 @@ module.exports = class Supair {
       console.log(delres.command ? `${delres.command} ${TblNm}` : 'Error in DROP query')
       await sleep(200)
       const Q = `CREATE TABLE IF NOT EXISTS "${TblNm}" (\n${SQL.createTables[TblNm].fields.join(',\n')} );`
-      console.log(Q)
+      //console.log(Q)
       const cres = await pg.query(Q)
       console.log(cres.command ? `${cres.command} ${TblNm}` : 'Error in CREATE query')
       await sleep(200)
@@ -286,40 +290,38 @@ module.exports = class Supair {
       delete rec.id
       for (let FldNm in META.tables[TblNm].fields) {
         const field = META.tables[TblNm].fields[FldNm]
-        if (!(FldNm in rec) || !rec[FldNm]) {
-          sqlRec[FldNm] = null
-          continue
-        }
         if (field.type == 'multipleRecordLinks') {
+          //if (TblNm == 'Categories') console.log(`multipleRecordLinks ${TblNm}.${FldNm}:`, field._rel)
           if (field._rel.link == 'n:1' || field._rel.link == '1:1') {
-            sqlRec[FldNm] = rec[FldNm][0] // first recId
+            sqlRec[FldNm] = rec[FldNm] ? rec[FldNm][0] : null
           }
         } else {
-          sqlRec[FldNm] = rec[FldNm]
+          sqlRec[FldNm] = rec[FldNm] ? rec[FldNm] : null
         }
       }
       return sqlRec
     }
     for (let TblNm in RECORDS) {
-      let chunks = _.chunk(Object.values(RECORDS[TblNm]), 5)
+      let chunks = _.chunk(Object.values(RECORDS[TblNm]), 100)
       //console.log(`########## ${chunks.length} chunks of 100 ${TblNm} records`)
       for (let chunk of chunks) {
         const sqlRecs = chunk.map(rec => at2sb(rec))
         //const tstRec = _.find(sqlRecs, {ID: 'Kalyn & Dana - Videography 4hrs'})
         //if (!tstRec) continue
         //console.log( tstRec )
-        if (TblNm != 'Events') continue // TESTING
+        //if (!(TblNm == 'Events' || TblNm == 'Categories' || TblNm == 'Places')) continue // TESTING
         const res = await supabase
           .from(TblNm)
           .insert(sqlRecs)
         
         if (res.data) {
-          console.log(`inserted ${TblNm}:`)
-          console.log(res.data.map(row => row.id))
+          console.log(`inserted ${sqlRecs.length} ${TblNm}:`)
+          //console.log(res.data.map(row => row.id))
         } else {
           console.log(`error while inserting ${TblNm}:`)
           console.log(res.error)
-          console.log(sqlRecs)          
+          console.log(sqlRecs)
+          return
         }
         
       }
