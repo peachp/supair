@@ -69,13 +69,14 @@ var SQL = {
         fields: []
     } */
   },
-  addFKs: [],
   createTablesNM: {
     /* TableA: {
         fields: []
     } */
   },
+  addFKs: [],
 }
+var nmRecs = {}
 
 var lastRefresh
 var base
@@ -237,17 +238,18 @@ module.exports = class Supair {
             // ...it's an Airtable thing to have FK on both sides...
           } else if (this_rel.linksTo == 'many' && other_rel.linksTo == 'many') {
             this_rel.link = 'n:m'
-            const nmTblName = [TblNm, this_rel.table].sort().join('_')
-            // TODO create, alter to add column table "${nmTblName}" for the n:m relation
-            if (!SQL.createTablesNM[nmTblName]) {
-              SQL.createTablesNM[nmTblName] = `CREATE TABLE IF NOT EXISTS "${nmTblName}" (
-                "${TblNm}_id" TEXT,
-                "${this_rel.table}_id" TEXT,
-                PRIMARY KEY ("${TblNm}_id", "${this_rel.table}_id") );
+            const nmTblNm = [TblNm, this_rel.table].sort().join('_')
+            this_rel.nmTblNm = nmTblNm
+            this_rel.fldA = `${TblNm}_id`
+            this_rel.fldB = `${this_rel.table}_id`
+            if (!SQL.createTablesNM[nmTblNm]) {
+              SQL.createTablesNM[nmTblNm] = `CREATE TABLE IF NOT EXISTS "${nmTblNm}" (
+                "${this_rel.fldA}" TEXT,
+                "${this_rel.fldB}" TEXT,
+                PRIMARY KEY ("${this_rel.fldA}", "${this_rel.fldB}") );
               `
-              SQL.addFKs.push(`ALTER TABLE ONLY "${nmTblName}" ADD CONSTRAINT "fk_${TblNm}" FOREIGN KEY("${TblNm}_id") REFERENCES "${TblNm}"("id") ON DELETE SET NULL;`)
-              SQL.addFKs.push(`ALTER TABLE ONLY "${nmTblName}" ADD CONSTRAINT "fk_${this_rel.table}" FOREIGN KEY("${this_rel.table}_id") REFERENCES "${this_rel.table}"("id") ON DELETE SET NULL;`)              
-              //delete META.tables[TblNm].fields[FldNm]
+              SQL.addFKs.push(`ALTER TABLE ONLY "${nmTblNm}" ADD CONSTRAINT "fk_${TblNm}" FOREIGN KEY("${this_rel.fldA}") REFERENCES "${TblNm}"("id") ON DELETE SET NULL;`)
+              SQL.addFKs.push(`ALTER TABLE ONLY "${nmTblNm}" ADD CONSTRAINT "fk_${this_rel.table}" FOREIGN KEY("${this_rel.fldB}") REFERENCES "${this_rel.table}"("id") ON DELETE SET NULL;`)              
             }
           } else {
             console.warn(`Cannot detect relation on ${TblNm}.${FldNm}; this_rel, other_rel:`)
@@ -261,7 +263,6 @@ module.exports = class Supair {
         }                
       }
     }
-
     for (let TblNm in SQL.createTables) {
       const delres = await pg.query(`DROP TABLE IF EXISTS "${TblNm}" CASCADE`)
       console.log(delres.command ? `${delres.command} ${TblNm}` : 'Error in DROP query')
@@ -272,40 +273,51 @@ module.exports = class Supair {
       console.log(cres.command ? `${cres.command} ${TblNm}` : 'Error in CREATE query')
       await sleep(200)
     }
-    
-    return
     for (let nmTblNm in SQL.createTablesNM) {
-      console.log(SQL.createTablesNM[nmTblNm])
+      const delres = await pg.query(`DROP TABLE IF EXISTS "${nmTblNm}" CASCADE`)
+      console.log(delres.command ? `${delres.command} ${nmTblNm}` : 'Error in DROP query')
+      await sleep(200)
+      const cres = await pg.query(SQL.createTablesNM[nmTblNm])
+      console.log(cres.command ? `${cres.command} ${nmTblNm}` : 'Error in CREATE query')
+      await sleep(200)
     }
 
     return
   }
   async insertData(params) {
     var supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY)
-    //console.log(META.tables.EventDetails)
-    function at2sb(rec) {
-      let sqlRec = { id: rec.id }
-      const TblNm = rec._tableName
-      delete rec._tableName
-      delete rec.id
-      for (let FldNm in META.tables[TblNm].fields) {
-        const field = META.tables[TblNm].fields[FldNm]
-        if (field.type == 'multipleRecordLinks') {
-          //if (TblNm == 'Categories') console.log(`multipleRecordLinks ${TblNm}.${FldNm}:`, field._rel)
-          if (field._rel.link == 'n:1' || field._rel.link == '1:1') {
-            sqlRec[FldNm] = rec[FldNm] ? rec[FldNm][0] : null
-          }
-        } else {
-          sqlRec[FldNm] = rec[FldNm] ? rec[FldNm] : null
-        }
-      }
-      return sqlRec
-    }
     for (let TblNm in RECORDS) {
       let chunks = _.chunk(Object.values(RECORDS[TblNm]), 100)
       //console.log(`########## ${chunks.length} chunks of 100 ${TblNm} records`)
       for (let chunk of chunks) {
-        const sqlRecs = chunk.map(rec => at2sb(rec))
+        const sqlRecs = chunk.map(rec => {
+          let sqlRec = { id: rec.id }
+          const TblNm = rec._tableName
+          delete rec._tableName
+          delete rec.id
+          for (let FldNm in META.tables[TblNm].fields) {
+            const field = META.tables[TblNm].fields[FldNm]
+            if (field.type == 'multipleRecordLinks') {
+              //if (TblNm == 'Categories') console.log(`multipleRecordLinks ${TblNm}.${FldNm}:`, field._rel)
+              if (field._rel.link == 'n:1' || field._rel.link == '1:1') {
+                sqlRec[FldNm] = rec[FldNm] ? rec[FldNm][0] : null
+              } else if (field._rel.link == 'n:m' && rec[FldNm]) {
+                const nmTblNm = field._rel.nmTblNm
+                if (!nmRecs[nmTblNm]) nmRecs[nmTblNm] = []
+                for (let recId of rec[FldNm]) {
+                  var nmRec = {}
+                  nmRec[field._rel.fldA] = sqlRec.id
+                  nmRec[field._rel.fldB] = recId
+                  const exists = _.find(nmRecs[nmTblNm], rec => rec[field._rel.fldA] == sqlRec.id && rec[field._rel.fldB] == recId)
+                  if(!exists) nmRecs[nmTblNm].push(nmRec)
+                }
+              }
+            } else {
+              sqlRec[FldNm] = rec[FldNm] ? rec[FldNm] : null
+            }
+          }
+          return sqlRec
+        })
         //const tstRec = _.find(sqlRecs, {ID: 'Kalyn & Dana - Videography 4hrs'})
         //if (!tstRec) continue
         //console.log( tstRec )
@@ -324,6 +336,19 @@ module.exports = class Supair {
           return
         }
         
+      }
+    }
+    for (let TblNm in nmRecs) {
+      const resNM = await supabase
+        .from(TblNm)
+        .insert(nmRecs[TblNm])
+      if (resNM.data) {
+        console.log(`inserted ${TblNm}:`)
+        //console.log(resNM.data.map(row => row.id))
+      } else {
+        console.log(`error while inserting ${TblNm}:`)
+        console.log(resNM.error)
+        return
       }
     }
     //pg.end()
