@@ -15,6 +15,7 @@ function sleep(ms) {
   });
 }
 
+var supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY)
 
 class Emitter extends EventEmitter {}
 const EVENTS = new Emitter()
@@ -217,13 +218,12 @@ module.exports = class Supair {
         if (field.type == 'multipleRecordLinks') {
           const this_rel = field._rel
           const other_rel = otherRel(TblNm, FldNm)
-          //console.log(`${TblNm} linksTo ${this_rel.linksTo} ${this_rel.table} --- ${this_rel.table} linksTo ${other_rel.linksTo} ${TblNm} `)
           if (this_rel.linksTo == 'one' && other_rel.linksTo == 'one') {
             // Places self ref Places...?
             if (this_rel.mandatory) {
               this_rel.link = '1:1'              
               SQL.createTables[TblNm].fields.push(`"${FldNm}" TEXT`)
-              SQL.addFKs.push(`ALTER TABLE ONLY "${TblNm}" ADD CONSTRAINT "fk_${this_rel.table}" FOREIGN KEY("${FldNm}") REFERENCES "${this_rel.table}"("id") ON DELETE SET NULL;`)
+              SQL.addFKs.push(`ALTER TABLE ONLY "${TblNm}" ADD CONSTRAINT "fk_${this_rel.table}_${FldNm}" FOREIGN KEY("${FldNm}") REFERENCES "${this_rel.table}"("id") ON DELETE SET NULL;`)
               SQL.addFKs.push(`ALTER TABLE ONLY "${TblNm}" ALTER COLUMN "${FldNm}" SET NOT NULL;`)              
             } else {
               // ?
@@ -231,7 +231,7 @@ module.exports = class Supair {
           } else if (this_rel.linksTo == 'one' && other_rel.linksTo == 'many') {
             this_rel.link = 'n:1'
             SQL.createTables[TblNm].fields.push(`"${FldNm}" TEXT`)
-            SQL.addFKs.push(`ALTER TABLE ONLY "${TblNm}" ADD CONSTRAINT "fk_${this_rel.table}" FOREIGN KEY("${FldNm}") REFERENCES "${this_rel.table}"("id") ON DELETE SET NULL;`)
+            SQL.addFKs.push(`ALTER TABLE ONLY "${TblNm}" ADD CONSTRAINT "fk_${this_rel.table}_${FldNm}" FOREIGN KEY("${FldNm}") REFERENCES "${this_rel.table}"("id") ON DELETE SET NULL;`)
           } else if (this_rel.linksTo == 'many' && other_rel.linksTo == 'one') {
             this_rel.link = '1:n'
             //delete META.tables[TblNm].fields[FldNm]
@@ -284,8 +284,7 @@ module.exports = class Supair {
 
     return
   }
-  async insertData(params) {
-    var supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY)
+  async insertData(params) {    
     for (let TblNm in RECORDS) {
       let chunks = _.chunk(Object.values(RECORDS[TblNm]), 100)
       //console.log(`########## ${chunks.length} chunks of 100 ${TblNm} records`)
@@ -355,10 +354,20 @@ module.exports = class Supair {
   }
   async addConstraints() {
     for (let constr of SQL.addFKs) {
-      console.log(constr)
       const res = await pg.query(constr)
       console.log(res.command ? `${constr}` : 'Error adding contraint query')
       await sleep(200)
     }
+  }
+  async test() {
+    const { data, error } = await supabase
+    .from('EventDetails')
+    .select(`
+      ID,
+      Event (
+        ID
+      )
+    `)
+    console.log(data)
   }
 }

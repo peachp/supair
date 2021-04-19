@@ -15,6 +15,7 @@ async function init() {
   await supair.createBasicSchema()
   await supair.insertData()
   await supair.addConstraints()
+  await supair.test()
 }
 
 init()
