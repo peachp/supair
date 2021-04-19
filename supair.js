@@ -356,6 +356,9 @@ module.exports = class Supair {
   async addConstraints() {
     for (let constr of SQL.addFKs) {
       console.log(constr)
+      const res = await pg.query(constr)
+      console.log(res.command ? `${constr}` : 'Error adding contraint query')
+      await sleep(200)
     }
   }
 }

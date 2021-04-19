@@ -14,6 +14,7 @@ async function init() {
   await supair.generateMetaData()
   await supair.createBasicSchema()
   await supair.insertData()
+  await supair.addConstraints()
 }
 
 init()
